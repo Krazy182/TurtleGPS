@@ -36,7 +36,7 @@ Every body has `type` and `dim` (the sender's dimension).
 | `hb` (turtle heartbeat) | any computer with the secret; optionally only IDs in `turtles` |
 | `hb` (`role = "gpshost"` / `"pocket"`) | any computer with the secret |
 | `action`, `view_req` (and commands from milestone 3) | IDs in `commanders` only |
-| `upd_req` | any computer with the secret |
+| `upd_req`, `ping` | any computer with the secret |
 | anything to a turtle, GPS host or pocket | only the control computer (`serverId`) |
 
 ## Message types (milestone 1)
@@ -48,6 +48,7 @@ Every body has `type` and `dim` (the sender's dimension).
 | `hb_ack` | control → device | `ver` (the control's code version) |
 | `view_req` / `view` | pocket ↔ control | map data for one dimension |
 | `action` / `action_r` | pocket ↔ control | `op` = `forget`, `ack`, `ackAll` |
+| `ping` / `pong` | any → control | doctor's round-trip; `pong` has `ver`, `commander`, `turtleAllowed`, `known` |
 | `upd_offer` | control → all | `ver` |
 | `upd_req` | device → control | `have = { [path] = sha256 }` |
 | `upd_file` | control → device | `path`, `data`, `hash` |

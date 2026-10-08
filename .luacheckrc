@@ -7,7 +7,7 @@ files["src/fleet"] = {
   read_globals = {
     "term", "fs", "os", "peripheral", "rednet", "colors", "colours", "keys", "parallel",
     "sleep", "write", "print", "printError", "read", "shell", "turtle", "pocket", "gps",
-    "textutils", "settings", "vector", "window", "multishell", "http", "redstone", "rs",
+    "textutils", "settings", "vector", "window", "multishell", "http", "redstone", "rs", "_HOST",
   },
 }
 files["test"] = { globals = { "keys" }, unused_args = false }

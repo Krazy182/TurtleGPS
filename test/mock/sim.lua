@@ -436,6 +436,10 @@ function Sim:onEquipChanged(c, side, initial)
       self:attach(c, side, { "modem", ender = u.ender })
       if not initial then self:queue(c, table.pack("peripheral", side)) end
     end
+  elseif u and u.kind == "chunky" then
+    -- Advanced Peripherals' Chunky Turtle exposes a peripheral of type "chunky"
+    c.peripherals[side] = { type = "chunky", side = side, methods = {} }
+    if not initial then self:queue(c, table.pack("peripheral", side)) end
   elseif had then
     c.peripherals[side] = nil
     if not initial then self:queue(c, table.pack("peripheral_detach", side)) end

@@ -21,7 +21,7 @@ return {
       files = { ["/install.lua"] = readHost("dist/install.lua"), ["/startup.lua"] = 'shell.run("/install.lua")' },
     })
     -- role, secret, control id, dimension, label, reboot
-    sim:typeLines(t, { "", H.SECRET, "1", "nether", "Netherbot", "y" })
+    sim:typeLines(t, { "", "", H.SECRET, "1", "nether", "Netherbot", "y" })
     sim:boot(t)
     sim:run(1)
     H.ok(t.fs:readFile("/fleet/config.lua"), t.screen:dumpText())

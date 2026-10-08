@@ -12,6 +12,7 @@ local Up = require("lib.update")
 local Fleet = require("server.fleet")
 local Notify = require("server.notify")
 local App = require("ui.app")
+local J = require("lib.joincode")
 
 --- Text scale: 1 (bigger, easier to touch) when the monitor still gets 60x24 characters,
 --- else 0.5. An explicit monitor.scale in config wins.
@@ -110,6 +111,7 @@ return function(cfg)
     if not mon then
       while true do os.pullEvent("fleet_never") end
     end
+    local showJoinUntil = 0
     local function draw()
       local w, h = term.getSize()
       term.setBackgroundColor(colors.black)
@@ -173,9 +175,15 @@ return function(cfg)
         term.write(U.trunc(("last denied: #%d %s: %s"):format(dn.from, dn.what, dn.why), w))
         y = y + 1
       end
+      if showJoinUntil > os.epoch("utc") then
+        term.setCursorPos(1, y)
+        term.setTextColor(colors.yellow)
+        term.write(U.trunc("Join code: " .. J.make(os.getComputerID(), cfg.secret), w))
+        y = y + 1
+      end
       term.setCursorPos(1, y)
       term.setTextColor(colors.cyan)
-      term.write(U.trunc("[U] push update to fleet  [S] save now  Ctrl+T stop", w))
+      term.write(U.trunc("[J] join code  [U] push update  [S] save  Ctrl+T stop", w))
       local lines = log.lines
       local room = h - y
       for i = math.max(1, #lines - room + 1), #lines do
@@ -195,6 +203,9 @@ return function(cfg)
         timer = os.startTimer(1)
       elseif ev == "char" and (a == "u" or a == "U") then
         if upd:offer() then log:info("update %s offered to the fleet", fleet.ver) end
+      elseif ev == "char" and (a == "j" or a == "J") then
+        showJoinUntil = os.epoch("utc") + 30000
+        draw()
       elseif ev == "char" and (a == "s" or a == "S") then
         fleet:save()
         log:info("saved")

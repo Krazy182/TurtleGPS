@@ -165,6 +165,7 @@ return function(sim, c)
   }
   G.redstone, G.rs = rs, rs
 
+  G.http = c.http -- tests can attach a fake http API (bios then loads rom/apis/http)
   if c.kind == "turtle" then G.turtle = makeTurtle(sim, c) end
   if c.kind == "pocket" then G.pocket = { equipBack = function() return false end, unequipBack = function() return false end } end
   return G

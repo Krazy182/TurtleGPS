@@ -18,6 +18,8 @@ P.UPD_OFFER = "upd_offer"  -- server -> all: new code version available
 P.UPD_REQ = "upd_req"      -- device -> server: send me the files I am missing
 P.UPD_FILE = "upd_file"    -- server -> device: one file
 P.UPD_END = "upd_end"      -- server -> device: manifest, all files sent
+P.PING = "ping"            -- any fleet computer -> control: are you there? (doctor)
+P.PONG = "pong"            -- control -> asker: yes, plus what it thinks of the asker
 
 -- Headings: 0 = north (-z), 1 = east (+x), 2 = south (+z), 3 = west (-x)
 P.HEADING_NAME = { [0] = "N", [1] = "E", [2] = "S", [3] = "W" }

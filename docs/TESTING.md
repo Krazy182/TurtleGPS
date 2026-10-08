@@ -55,7 +55,8 @@ exact block-drop rules, and text rendering details. Those need your in-game resu
 ## Milestone 1 in-game checklist
 
 Set up the control computer, one GPS constellation per dimension you use, and at least one
-turtle per dimension (see [SETUP.md](SETUP.md)). Then check:
+turtle per dimension (see [SETUP.md](SETUP.md)). Run `/fleet/bin/doctor` on each computer
+once; anything it flags is worth fixing first. Then check:
 
 **GPS**
 
@@ -108,8 +109,11 @@ For anything that doesn't match:
 
 - what you did, and what the screen showed (a screenshot is best)
 - the text on the control computer's own screen (rejected / denied lines and the log)
-- logs: on the affected computer, run `pastebin put /fleet/data/log.txt` and
-  `pastebin put /fleet/data/crash.txt` (if it exists), and send me the links
+- **a report link**: on the affected computer, stop TurtleGPS (Ctrl+T) and run
+  `/fleet/bin/report`. It uploads one paste with the doctor results, logs, crash log,
+  config (secret removed), peripherals and versions, then prints the link. The paste is
+  *unlisted* and expires after a week. Please don't use `pastebin put` for logs: CC uploads
+  those as **public** pastes, and logs contain your coordinates.
 - versions: Minecraft, CC:Tweaked, Advanced Peripherals
 - your monitor size in blocks, and the text scale the log says it picked
 - the Advanced Peripherals config values `playerSpy` and `chatBoxMultiDimensional`, if

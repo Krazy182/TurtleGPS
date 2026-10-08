@@ -64,9 +64,12 @@ Milestone 1 also ships the parts every later milestone relies on:
 
 ## Getting started
 
-1. Read [docs/SETUP.md](docs/SETUP.md): hardware, GPS host placement, installing.
-2. Do the Milestone 1 checks in [docs/TESTING.md](docs/TESTING.md#milestone-1-in-game-checklist)
-   and report back what you see.
+1. Read [docs/SETUP.md](docs/SETUP.md): hardware, GPS host placement, installing. After the
+   control computer is set up, every other computer installs with one line and a join code,
+   for example `pastebin run <code> turtle TG-7-...`.
+2. Run `/fleet/bin/doctor` on each computer. It checks the setup and explains anything wrong.
+3. Do the Milestone 1 checks in [docs/TESTING.md](docs/TESTING.md#milestone-1-in-game-checklist).
+   For anything odd, run `/fleet/bin/report` and send me the link.
 
 ## Developing
 
@@ -80,9 +83,9 @@ python3 tools/render_screen.py test/out/m1_monitor.json   # look at a mock monit
 luacheck src tools test          # static checks (.luacheckrc)
 ```
 
-53 tests cover: libraries, GPS, turtle navigation, milestone 1 end to end, OTA updates,
-security, UI layouts, installer and setup, and failure modes (full disk, bad config, spam,
-30-turtle load). They pass both with the built-in CraftOS ports and on the real CraftOS ROM.
+63 tests cover: libraries, GPS, turtle navigation, milestone 1 end to end, OTA updates,
+security, UI layouts, installer and setup (join codes), the doctor and report tools, and
+failure modes (full disk, bad config, spam, 30-turtle load). They pass both with the built-in CraftOS ports and on the real CraftOS ROM.
 [docs/VERIFIED.md](docs/VERIFIED.md) lists the CC:Tweaked and Advanced Peripherals behaviour
 checked against their source.
 
@@ -96,7 +99,7 @@ src/fleet/            installed to /fleet on every computer
   server/             fleet.lua (state, alerts), notify.lua (Chat Box / speaker)
   turtle/             nav.lua (dead reckoning + GPS + heading)
   ui/                 app.lua (the shared map UI), map.lua, fb.lua, glyphs.lua
-  bin/                setup.lua, gpscheck.lua
+  bin/                setup, doctor, report, joincode, gpscheck
 dist/install.lua      single-file installer (generated)
 test/                 mock harness (test/mock) and tests
 tools/                build.lua, render_screen.py, fetch_rom.sh

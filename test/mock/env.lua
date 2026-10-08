@@ -356,6 +356,11 @@ return function(sim, c)
 
   -- textutils (minimal) ---------------------------------------------------------------
   G.textutils = {
+    urlEncode = function(s)
+      return (tostring(s):gsub("\n", "\r\n"):gsub("[^%w%-%._~ ]", function(ch)
+        return ("%%%02X"):format(ch:byte())
+      end):gsub(" ", "+"))
+    end,
     serialize = function(t) return sim.ser.serialize(t) end,
     unserialize = function(s) return sim.ser.unserialize(s) end,
     formatTime = function(t) return string.format("%d:%02d", math.floor(t), math.floor((t % 1) * 60)) end,
@@ -445,6 +450,7 @@ return function(sim, c)
   G.shell = shell
 
   G.__mock = { makeRequire = makeRequire }
+  G.http = c.http -- tests can attach a fake http API
 
   if c.kind == "turtle" then G.turtle = makeTurtle(sim, c) end
   if c.kind == "pocket" then G.pocket = {} end

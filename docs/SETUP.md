@@ -85,25 +85,32 @@ that dimension, run `/fleet/bin/gpscheck`.
 `dist/install.lua` is a single file containing all the code. Your repository is private, so
 in-game `wget` can't fetch it straight from GitHub. Use one of these:
 
-- **pastebin (works on any server):** open `dist/install.lua` on GitHub, click *Raw*, copy
-  everything, and create a new paste on pastebin.com (it's ~128 KB; the limit is 512 KB).
-  Then on each computer run: `pastebin run <code>`
+- **pastebin (works on any server with CC's HTTP API on):** open `dist/install.lua` on
+  GitHub, click *Raw*, copy everything, and create a new paste on pastebin.com (it's ~165 KB;
+  the limit is 512 KB). It's only code with no secret in it, but setting *Paste Exposure:
+  Unlisted* keeps it out of public listings. Then on each computer run:
+  `pastebin run <code>` (plus the setup arguments below).
 - **Public repo:** if you make the repo public:
   `wget run https://raw.githubusercontent.com/Krazy182/TurtleGPS/<branch>/dist/install.lua`
 - **Singleplayer / server admin:** copy the file to
   `<world>/computercraft/computer/<id>/install.lua` and run `install`.
 
 The installer writes `/fleet`, keeps any existing `/fleet/config.lua` and `/fleet/data`, and
-runs setup on a fresh computer. Setup asks a few questions, writes `/fleet/config.lua` and a
-`/startup.lua` that launches TurtleGPS on boot, then reboots. Paste works in CC prompts
-(Ctrl+V), which helps with the secret.
+runs setup on a fresh computer. Setup writes `/fleet/config.lua` and a `/startup.lua` that
+launches TurtleGPS on boot, then reboots. Anything you type after the paste code goes to
+setup, so most computers need only one line.
+
+**Join code.** The control computer's setup ends by showing a join code like
+`TG-7-k3m9...-1f2e`: its computer ID and the shared secret in one string, with a checksum that
+catches typos. Press **J** on the control computer's own screen to see it again, or run
+`/fleet/bin/joincode`. Keep it private: anyone with it can talk to your fleet. Paste works in
+CC prompts (Ctrl+V).
 
 ### Order
 
-1. **Control computer:** `pastebin run <code>` → role `control`, leave the secret blank to
-   generate one (**write it down**), enter your dimension and your player name, and the
-   pocket IDs if you have them. Then add your garages:
-   `edit /fleet/config.lua`
+1. **Control computer:** `pastebin run <code> control` → leave the secret blank to generate
+   one, then enter your dimension, your player name, and pocket IDs if you have them. **Note
+   the join code it prints.** Then add your garages with `edit /fleet/config.lua`:
 
    ```lua
    garages = {
@@ -113,14 +120,32 @@ runs setup on a fresh computer. Setup asks a few questions, writes `/fleet/confi
    },
    ```
 
-   Reboot (Ctrl+R held) after editing.
-2. **GPS hosts (4 per dimension):** role `gpshost`, the secret, the control computer's ID,
-   the dimension (`overworld`, `nether`, `end`), and this computer's x y z.
-3. **Turtles:** role `turtle`, the secret, the control's ID, the dimension (or leave it blank
-   to take it from GPS), and a label. On first start the turtle moves one block forward or
-   back and returns to learn its heading, so leave it room and at least 2 fuel.
-4. **Pockets** (optional for now): role `pocket`, the secret, the control's ID, your player
-   name.
+   Reboot (hold Ctrl+R) after editing.
+2. **GPS hosts (4 per dimension):** one line each, no questions:
+   `pastebin run <code> gpshost <join code> dim=nether x=2 y=60 z=-14 -y`
+   (`dim` is `overworld`, `nether` or `end`; x y z are this computer's block coordinates.)
+3. **Turtles:** `pastebin run <code> turtle <join code>`, then it asks the dimension (Enter =
+   take it from GPS) and a label. Add `dim=nether label=Digger1 -y` to skip the questions. On
+   first start the turtle moves one block forward or back and returns to learn its heading,
+   so leave it room and at least 2 fuel.
+4. **Pockets** (optional for now): `pastebin run <code> pocket <join code> owner=YourName -y`
+
+Without a join code, setup asks for the secret and the control's ID instead.
+
+### Check each computer
+
+Right after installing, or whenever something looks wrong: hold **Ctrl+T** to stop TurtleGPS,
+run **`/fleet/bin/doctor`**, then hold **Ctrl+R** to restart. It checks:
+
+- config and that the code is intact
+- disk space and the modem
+- a signed round-trip to the control computer, which proves the secret and ID are right
+- GPS position and dimension (on a GPS host: whether its neighbours agree with its coordinates)
+- on turtles: Chunky upgrade, fuel and the slot-16 pickaxe
+- on the control computer: the monitor, a test Chat Box message to you, the speaker, and the
+  Player Detector, including whether the server disabled `playerSpy`
+
+Each problem comes with what to do about it.
 
 ### Updating later
 
@@ -168,6 +193,8 @@ Turtle:
 
 ## Troubleshooting
 
+First run `/fleet/bin/doctor` on the computer in question (stop TurtleGPS with Ctrl+T first).
+
 | You see | Meaning / fix |
 |---|---|
 | Turtle: `Server no reply: check serverId/secret` | Wrong `serverId` or secret, or the control computer isn't running. The control's console shows `last rejected: #ID bad signature` when a secret is wrong. |
@@ -179,4 +206,4 @@ Turtle:
 | Control console: `chat: NOT_SAME_DIMENSION` | The server's Advanced Peripherals config has `chatBoxMultiDimensional = false`. |
 | Side panel: `GPS: 3/4 up (need 4)` | Tap it to see which host is offline. If you removed a host on purpose, press Forget. |
 | You'd rather see plain letters for map icons | Set `ui = { ascii = true }` on the control computer. |
-| `TurtleGPS crashed:` | It restarts by itself. Send `/fleet/data/crash.txt` (`pastebin put /fleet/data/crash.txt` gives you a link). |
+| `TurtleGPS crashed:` | It restarts by itself. Run `/fleet/bin/report` and send me the link. |

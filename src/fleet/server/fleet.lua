@@ -281,6 +281,12 @@ function Fleet:handle(from, body, now)
     if body.role == "gpshost" then return self:onGpsHeartbeat(from, body, now) end
     if body.role == "pocket" then return { type = P.HB_ACK, ver = self.ver } end
     return self:onTurtleHeartbeat(from, body, now)
+  elseif ty == P.PING then
+    local allowedTurtle = type(self.cfg.turtles) ~= "table" or contains(self.cfg.turtles, from)
+    return {
+      type = P.PONG, ver = self.ver, commander = self:isCommander(from), turtleAllowed = allowedTurtle,
+      known = self.turtles[from] ~= nil or self.gps[from] ~= nil, req = body.req,
+    }
   elseif ty == P.ACTION or ty == P.VIEW_REQ then
     if not self:isCommander(from) then
       self:deny(from, ty, "not in commanders allowlist")

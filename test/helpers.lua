@@ -131,5 +131,23 @@ function H.turtle(sim, t)
   })
 end
 
+--- Fake http API for computer c. responder(url, body) returns the response text.
+--- Works in light mode (post) and real-ROM mode (native request + http_success event).
+function H.fakeHttp(sim, c, responder)
+  local function handle(text)
+    return { readAll = function() return text end, close = function() end,
+      getResponseCode = function() return 200 end }
+  end
+  c.http = {
+    post = function(url, body) return handle(responder(url, body)) end,
+    request = function(url, body)
+      if type(url) == "table" then url, body = url.url, url.body end
+      sim:queue(c, table.pack("http_success", url, handle(responder(url, body))))
+      return true
+    end,
+    checkURL = function() return true end,
+  }
+end
+
 H.Sim = Sim
 return H
