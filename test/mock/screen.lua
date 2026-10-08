@@ -60,7 +60,6 @@ function Screen:put(str, fg, bg)
     local x = self.cx + i - 1
     if x >= 1 and x <= self.w then
       local ch = str:sub(i, i)
-      if ch == "\t" then ch = " " end
       self.text[y][x] = ch
       self.fgs[y][x] = fg and fg:sub(i, i) or self.fg
       self.bgs[y][x] = bg and bg:sub(i, i) or self.bg
@@ -125,12 +124,13 @@ function Screen:api()
 end
 
 -- Unicode approximations of the CC font for text dumps.
+-- Unicode approximations of CC:Tweaked's term_font.png (checked against the real font).
 local GLYPH = {
   [1] = "☺", [2] = "☻", [3] = "♥", [4] = "♦", [5] = "♣", [6] = "♠", [7] = "•", [8] = "◘",
-  [9] = "○", [10] = "◙", [11] = "♂", [12] = "♀", [13] = "♪", [14] = "♫", [15] = "☼",
+  [9] = " ", [10] = " ", [11] = "♂", [12] = "♀", [13] = " ", [14] = "♪", [15] = "♫",
   [16] = "►", [17] = "◄", [18] = "↕", [19] = "‼", [20] = "¶", [21] = "§", [22] = "▬",
   [23] = "↨", [24] = "↑", [25] = "↓", [26] = "→", [27] = "←", [28] = "∟", [29] = "↔",
-  [30] = "▲", [31] = "▼", [127] = "⌂",
+  [30] = "▲", [31] = "▼", [127] = "▒",
 }
 
 local function utf8char(cp)
@@ -173,6 +173,26 @@ function Screen:find(str)
 end
 
 function Screen:contains(str) return self:find(str) ~= nil end
+
+--- Like find, but only matches starting left of column maxX (e.g. the map, not the side panel).
+function Screen:findLeftOf(str, maxX)
+  for y = 1, self.h do
+    local line = table.concat(self.text[y])
+    local x = line:find(str, 1, true)
+    while x do
+      if x < maxX then return x, y end
+      x = line:find(str, x + 1, true)
+    end
+  end
+end
+
+--- Column of the side panel's "|" separator (the right edge of the map).
+function Screen:mapRight()
+  for x = self.w, 1, -1 do
+    if self.text[math.floor(self.h / 2)][x] == "|" then return x end
+  end
+  return self.w
+end
 
 --- Writes a simple JSON dump for tools/render_screen.py.
 function Screen:dumpRaw(path)

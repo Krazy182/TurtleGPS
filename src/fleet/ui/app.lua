@@ -8,6 +8,7 @@ local U = require("lib.util")
 local FB = require("ui.fb")
 local Map = require("ui.map")
 local Glyphs = require("ui.glyphs")
+local store = require("lib.store")
 
 local App = {}
 App.__index = App
@@ -29,9 +30,39 @@ function App.new(opts)
     buttons = {}, hits = {},
     blink = false, data = nil,
     title = opts.title or "TurtleGPS",
+    statePath = opts.statePath, stateDirty = false, stateSavedAt = 0,
   }, App)
   self.fb = FB.new(opts.term)
+  self:loadState()
   return self
+end
+
+-- Remembers dimension, zoom/pan per dimension and layers across reboots.
+function App:loadState()
+  if not self.statePath then return end
+  local st = store.load(self.statePath, nil)
+  if type(st) ~= "table" then return end
+  if type(st.dim) == "string" then self.dim = st.dim end
+  if type(st.views) == "table" then
+    for d, v in pairs(st.views) do
+      if type(v) == "table" and type(v.cx) == "number" and type(v.cz) == "number" and Map.ZOOMS[v.zi] then
+        self.views[d] = Map.new(v.cx, v.cz, v.zi)
+      end
+    end
+  end
+  if type(st.layers) == "table" then
+    for k in pairs(self.layers) do
+      if type(st.layers[k]) == "boolean" then self.layers[k] = st.layers[k] end
+    end
+  end
+end
+
+function App:saveState(force)
+  if not self.statePath or not self.stateDirty then return end
+  local now = os.epoch("utc")
+  if not force and now - self.stateSavedAt < 5000 then return end
+  store.save(self.statePath, { dim = self.dim, views = self.views, layers = self.layers })
+  self.stateDirty, self.stateSavedAt = false, now
 end
 
 function App:say(msg, secs)
@@ -93,6 +124,7 @@ function App:setDim(d)
   self.dim = d
   self.sel = nil
   self.target = nil
+  if self.panel == "point" then self.panel = nil end
   self:refresh()
 end
 
@@ -201,6 +233,9 @@ function App:draw()
     if self.panel == "alerts" then self:drawAlertsOverlay(R.map)
     elseif self.panel == "menu" then self:drawMenuOverlay(R.map)
     elseif self.panel == "point" then self:drawPointSheet(R.map)
+    elseif self.panel == "gps" then
+      self.fb:fill(R.map.x, R.map.y, R.map.w, R.map.h, " ", colors.white, colors.black)
+      self:drawGps(R.map)
     elseif self.sel and self:turtle(self.sel) then self:drawDetailSheet(R.map) end
   else
     self:drawWideBar(R.bar)
@@ -346,10 +381,10 @@ function App:drawWideBar(r)
   local v = self:view()
   local m = self.rects.map
   if r.w >= 66 then
-    btn(G.left, function() Map.pan(v, -math.floor(m.w / 3), 0) end)
-    btn(G.up, function() Map.pan(v, 0, -math.floor(m.h / 3)) end)
-    btn(G.down, function() Map.pan(v, 0, math.floor(m.h / 3)) end)
-    btn(G.right, function() Map.pan(v, math.floor(m.w / 3), 0) end)
+    btn(G.panLeft, function() Map.pan(v, -math.floor(m.w / 3), 0) end)
+    btn(G.panUp, function() Map.pan(v, 0, -math.floor(m.h / 3)) end)
+    btn(G.panDown, function() Map.pan(v, 0, math.floor(m.h / 3)) end)
+    btn(G.panRight, function() Map.pan(v, math.floor(m.w / 3), 0) end)
     btn(G.center, function() self:centerOnFleet() end)
     x = x + 1
   end
@@ -385,8 +420,8 @@ function App:drawCompactBar(r)
   fb:text(x, r.y, sl, colors.white, BAR_BG)
   x = x + #sl
   x = self:button(x, r.y, 1, 1, "+", function() Map.zoom(self:view(), -1) end) + 1
-  x = self:button(x, r.y, 1, 1, G.menu, function() self.panel = self.panel ~= "menu" and "menu" or nil end,
-    colors.black, self.panel == "menu" and colors.white or BTN_BG) + 1
+  self:button(x, r.y, 1, 1, G.menu, function() self.panel = self.panel ~= "menu" and "menu" or nil end,
+    colors.black, self.panel == "menu" and colors.white or BTN_BG)
   local n = 0
   for _, a in ipairs(self.data.alerts) do if not a.acked then n = n + 1 end end
   local label = G.alert .. n
@@ -415,6 +450,8 @@ function App:drawSide(r)
     self:drawDetail(inner, t)
   elseif self.panel == "point" and self.target then
     self:drawPoint(inner)
+  elseif self.panel == "gps" then
+    self:drawGps(inner)
   else
     local half = math.max(6, math.floor(inner.h * 0.55))
     self:drawList({ x = inner.x, y = inner.y, w = inner.w, h = half })
@@ -428,15 +465,17 @@ function App:drawList(r)
   fb:text(r.x, y, ("TURTLES  %s  %d"):format(P.dimLabel(self.dim), #d.turtles), colors.yellow, nil, r.w)
   y = y + 1
   local gs, gc = self:gpsSummary()
-  fb:text(r.x, y, gs, gc, nil, r.w)
+  fb:text(r.x, y, gs .. (r.w - #gs >= 8 and "  [hosts]" or ""), gc, nil, r.w)
+  self.buttons[#self.buttons + 1] = { x1 = r.x, y1 = y, x2 = r.x + r.w - 1, y2 = y, fn = function() self.panel = "gps" end }
   y = y + 1
   if #d.turtles == 0 then
     fb:text(r.x, y + 1, "No turtles in this dimension.", colors.lightGray, nil, r.w)
     return
   end
   local shown = 0
+  local rh = self:rowHeight()
   for i, t in ipairs(d.turtles) do
-    if y >= r.y + r.h - 1 and i < #d.turtles then
+    if y + rh - 1 >= r.y + r.h - 1 and i < #d.turtles then
       fb:text(r.x, y, ("+%d more"):format(#d.turtles - shown), colors.gray, nil, r.w)
       break
     end
@@ -448,8 +487,8 @@ function App:drawList(r)
     fb:text(r.x + 2, y, U.pad(name, rowW - #status - 3), colors.white)
     fb:text(r.x + rowW - #status, y, status, col)
     local id = t.id
-    self.buttons[#self.buttons + 1] = { x1 = r.x, y1 = y, x2 = r.x + rowW - 1, y2 = y, fn = function() self:select(id) end }
-    y = y + 1
+    self.buttons[#self.buttons + 1] = { x1 = r.x, y1 = y, x2 = r.x + rowW - 1, y2 = y + rh - 1, fn = function() self:select(id) end }
+    y = y + rh
     shown = shown + 1
   end
 end
@@ -478,10 +517,61 @@ function App:drawAlerts(r)
     end
     local alert = a
     self.buttons[#self.buttons + 1] = {
-      x1 = r.x, y1 = y - #lines, x2 = r.x + r.w - 1, y2 = y - 1,
+      x1 = r.x, y1 = y - #lines, x2 = r.x + r.w - 1, y2 = y - 1 + (self:rowHeight() - 1),
       fn = function() self:openAlert(alert) end,
     }
+    y = y + self:rowHeight() - 1
   end
+end
+
+--- Rows are 2 lines tall on big monitors so they are easy to touch.
+function App:rowHeight()
+  return (self.rects and self.rects.bar.h >= 3) and 2 or 1
+end
+
+function App:drawGps(r)
+  local fb, d = self.fb, self.data
+  local y = r.y
+  fb:text(r.x, y, "GPS HOSTS  " .. P.dimLabel(self.dim), colors.yellow, nil, r.w)
+  y = y + 1
+  local gs, gc = self:gpsSummary()
+  fb:text(r.x, y, gs, gc, nil, r.w)
+  y = y + 2
+  local bh = self:rowHeight()
+  if #(d.gps or {}) == 0 then
+    for _, l in ipairs(self:wrap("No GPS host has reported in this dimension. Each host sends a heartbeat every 20 s once it runs TurtleGPS gpshost.", r.w)) do
+      fb:text(r.x, y, l, colors.lightGray, nil, r.w)
+      y = y + 1
+    end
+  end
+  for _, g in ipairs(d.gps or {}) do
+    if y + 1 >= r.y + r.h - bh then break end
+    local lost = g.link == "lost"
+    local head = ("#%d %s"):format(g.id, g.x and ("%d,%d,%d"):format(g.x, g.y, g.z) or "?")
+    local status = lost and ("OFFLINE " .. U.age(g.age)) or (U.age(g.age) .. " ago")
+    fb:text(r.x, y, head, lost and colors.red or colors.white, nil, r.w)
+    if #head + 1 + #status <= r.w then
+      fb:text(r.x + r.w - #status, y, status, lost and colors.red or colors.gray)
+    else
+      y = y + 1
+      fb:text(r.x + 2, y, status, lost and colors.red or colors.gray, nil, r.w - 2)
+    end
+    y = y + 1
+    if g.verdict and not lost then
+      for _, l in ipairs(self:wrap(g.verdict, r.w - 2)) do
+        if y >= r.y + r.h - bh then break end
+        fb:text(r.x + 2, y, l, g.verdict:find("^OK") and colors.lime or colors.orange, nil, r.w - 2)
+        y = y + 1
+      end
+    end
+    if lost then
+      local id = g.id
+      self:button(r.x + 2, y, 8, bh, "Forget", function() self:act({ op = "forgetGps", id = id }) end,
+        colors.white, colors.red)
+      y = y + bh
+    end
+  end
+  self:button(r.x, r.y + r.h - bh, 7, bh, "Back", function() self.panel = nil end)
 end
 
 function App:openAlert(a)
@@ -490,7 +580,8 @@ function App:openAlert(a)
   if a.tid and self:turtle(a.tid) then self:select(a.tid); self:centerOnSelected() end
 end
 
-function App:wrap(text, w)
+function App:wrap(text, w) -- luacheck: ignore self
+  w = math.max(1, w)
   local lines = {}
   text = tostring(text)
   while #text > w do
@@ -504,15 +595,15 @@ function App:wrap(text, w)
 end
 
 function App:detailLines(t)
-  local G = self.G
   local L = {}
   local function add(s, c) L[#L + 1] = { s, c or colors.white } end
   add(("#%d %s"):format(t.id, t.label or ""), colors.yellow)
   add(P.dimLabel(t.dim) .. "  facing " .. (t.h and P.HEADING_NAME[t.h] or "?"), colors.lightGray)
   add("Pos  " .. (t.x and U.fmtPos(t) or "unknown"), t.x and colors.white or colors.red)
-  local fix = t.fix == "dr" and "dead reckoning" or (t.fix or "?")
-  if t.fixAge then fix = fix .. ", gps " .. U.age(t.fixAge * 1000) .. " ago" end
-  if t.fix == "none" and t.gpsErr then fix = "none: " .. t.gpsErr end
+  local fix
+  if t.fix == "gps" then fix = "gps" .. (t.fixAge and (" " .. U.age(t.fixAge * 1000) .. " ago") or "")
+  elseif t.fix == "dr" then fix = "dead reckoning" .. (t.fixAge and (", gps " .. U.age(t.fixAge * 1000) .. " ago") or "")
+  else fix = "none" .. (t.gpsErr and (": " .. t.gpsErr) or "") end
   add("Fix  " .. fix, t.fix == "none" and colors.red or colors.white)
   if t.fuel and t.fuel >= 0 then
     add(("Fuel %d / %d"):format(t.fuel, t.fuelMax or 0), t.lowFuel and colors.orange)
@@ -634,6 +725,8 @@ function App:drawMenuOverlay(r)
   end
   y = y + 1
   self:button(r.x, y, r.w, 1, "Center on fleet", function() self:centerOnFleet(); self.panel = nil end)
+  y = y + 1
+  self:button(r.x, y, r.w, 1, "GPS hosts", function() self.panel = "gps" end)
   y = y + 2
   self:drawList({ x = r.x, y = y, w = r.w, h = r.y + r.h - y })
 end
@@ -681,9 +774,24 @@ function App:centerOnFleet()
   end
 end
 
+--- Turtles under a cell, or the nearest stack within a couple of cells: monitor
+--- touches at text scale 0.5 are hard to place exactly.
+function App:hitNear(x, y)
+  local ids = self.hits[x .. "," .. y]
+  if ids then return ids end
+  local radius = self.kind == "monitor" and 2 or 1
+  local best, bestD
+  for k, list in pairs(self.hits) do
+    local hx, hy = k:match("^(-?%d+),(-?%d+)$")
+    local d = math.max(math.abs(tonumber(hx) - x), math.abs(tonumber(hy) - y))
+    if d <= radius and (not bestD or d < bestD) then best, bestD = list, d end
+  end
+  return best
+end
+
 function App:tapMap(x, y)
   local r = self.rects.map
-  local ids = self.hits[x .. "," .. y]
+  local ids = self:hitNear(x, y)
   if ids and #ids > 0 then
     -- tapping a stack of turtles cycles through them
     local nextId = ids[1]
@@ -704,6 +812,7 @@ function App:tapMap(x, y)
 end
 
 function App:tap(x, y)
+  if type(x) ~= "number" or type(y) ~= "number" then return false end
   local b = self:buttonAt(x, y)
   if b then
     b.fn()
@@ -785,11 +894,13 @@ function App:run()
       self.blink = not self.blink
       self:refresh()
       self:draw()
+      self:saveState()
       timer = os.startTimer(1)
     elseif ev[1] == "monitor_resize" or ev[1] == "term_resize" then
       self.fb:resize()
       self:draw()
     elseif self:handle(table.unpack(ev, 1, ev.n)) then
+      self.stateDirty = true
       self:refresh()
       self:draw()
     end

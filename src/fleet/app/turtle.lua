@@ -60,7 +60,7 @@ return function(cfg)
       x = t.x, y = t.y, z = t.z, h = t.h, fix = t.fix, fixAge = t.fixAge, gpsErr = t.gpsErr,
       fuel = f, fuelMax = fmax, reserve = cfg.lowFuel,
       inv = { used, total },
-      status = state.status, job = state.job, msg = state.msg,
+      status = state.status, job = state.job, msg = state.msg or nav.warning,
       ver = updater.ver, up = math.floor(os.clock()),
     }
   end
@@ -145,8 +145,10 @@ return function(cfg)
       line(3, "Status", state.status, state.status == "idle" and colors.lime or colors.white)
       line(4, "Pos", t.x and U.fmtPos(t) or "unknown", t.x and colors.white or colors.red)
       line(5, "Facing", t.h and P.HEADING_NAME[t.h] or "unknown", t.h and colors.white or colors.red)
-      local fixText = t.fix == "none" and ("none: " .. tostring(t.gpsErr or "?"))
-        or (t.fix .. (t.fixAge and (" (gps " .. U.age(t.fixAge * 1000) .. " ago)") or ""))
+      local fixText
+      if t.fix == "none" then fixText = "none: " .. tostring(t.gpsErr or "?")
+      elseif t.fix == "gps" then fixText = "gps" .. (t.fixAge and (", " .. U.age(t.fixAge * 1000) .. " ago") or "")
+      else fixText = "dead reckoning" .. (t.fixAge and (", gps " .. U.age(t.fixAge * 1000)) or "") end
       line(6, "Fix", fixText, t.fix == "none" and colors.red or colors.white)
       line(7, "Fuel", f < 0 and "unlimited" or (f .. " / " .. fmax), (f >= 0 and f < cfg.lowFuel) and colors.orange or colors.white)
       line(8, "Inv", used .. " / " .. total .. " slots", used >= total and colors.orange or colors.white)
@@ -160,7 +162,8 @@ return function(cfg)
         link, lc = "no reply: check serverId/secret", colors.red
       end
       line(9, "Server", link, lc)
-      if state.msg then line(10, "Note", U.trunc(state.msg, 31), colors.orange) end
+      local note = state.msg or nav.warning
+      if note then line(10, "Note", U.trunc(note, 31), colors.orange) end
       if updater.status then line(11, "Update", U.trunc(updater.status, 31), colors.cyan) end
       local last = log.lines[#log.lines]
       if last then

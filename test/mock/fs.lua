@@ -19,19 +19,27 @@ local function parent(p)
   return p:match("^(.*)/[^/]*$") or ""
 end
 
+--- opts.rom = { files = { ["rom/..."] = content }, dirs = { ["rom/..."] = true } } (read-only)
 function FS.new(opts)
   opts = opts or {}
-  return setmetatable({
+  local self = setmetatable({
     files = {},           -- normalized path -> content
     dirs = { [""] = true },
     capacity = opts.capacity or 1000000,
     readOnly = { rom = true },
   }, FS)
+  if opts.rom then
+    for p, content in pairs(opts.rom.files) do self.files[p] = content end
+    for p in pairs(opts.rom.dirs) do self.dirs[p] = true end
+  end
+  return self
 end
 
 function FS:used()
   local n = 0
-  for _, c in pairs(self.files) do n = n + #c end
+  for p, c in pairs(self.files) do
+    if p:sub(1, 4) ~= "rom/" then n = n + #c end
+  end
   return n
 end
 
@@ -111,7 +119,7 @@ function FS:api()
   end
   function api.delete(p)
     p = norm(p)
-    if p == "" then error("Access denied", 2) end
+    if p == "" or api.isReadOnly(p) then error("Access denied", 2) end
     self_.files[p] = nil
     if self_.dirs[p] then
       local prefix = p .. "/"

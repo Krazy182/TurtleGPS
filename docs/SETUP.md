@@ -13,7 +13,8 @@
 ### Control room (any dimension, usually the Overworld)
 
 - Advanced computer with an **ender modem** (required).
-- **Advanced monitor**, as big as you like. 8x5 or 8x6 blocks works well at text scale 0.5.
+- **Advanced monitor**, as big as you like. 6x4 to 8x6 blocks works well; the text scale is
+  picked automatically.
 - Optional: **Chat Box** (alerts sent to you privately in chat), a **speaker** (chime),
   and a **Player Detector** (used from milestone 2).
 - The control room must stay loaded. Put it in the spawn chunks, or in the same chunk as
@@ -42,9 +43,8 @@ base. What matters:
    other three running. The Nether and the End have no spawn chunks, so this matters most there.
 2. **Not all at the same height.** Three hosts on one level plus one directly above is ideal.
    If all four are on one plane, GPS gives two mirror-image answers.
-3. **At least 6 blocks apart.** Recent CC:Tweaked versions of `gps.locate` treat hosts
-   closer than 5 blocks as duplicates. TurtleGPS's own locator doesn't, but other programs
-   might use the stock one.
+3. **Spread them out a little.** Hosts in the same block count as one; 8 blocks apart, as in
+   the layout below, gives good precision anywhere in the dimension.
 4. Each host's coordinates are **the block the computer occupies**. Press F3, look at the
    computer, and read "Targeted Block".
 
@@ -154,7 +154,7 @@ Control:
 | `lostAfter` | `45` | seconds without a heartbeat before LOST + alert |
 | `lowFuel` | `500` | low-fuel alert threshold |
 | `garages` | `{}` | `[dim] = { x, y, z }` |
-| `monitor` | `{ scale = 0.5 }` | `side` to pick a specific monitor, `scale` = text scale |
+| `monitor` | `{}` | `side` to pick a specific monitor; `scale` to force a text scale (default: 1 if that still gives 60x24 characters, else 0.5) |
 | `ui` | `{ ascii = false }` | `ascii = true` if arrows/house icons show as `?` |
 
 Turtle:
@@ -175,5 +175,8 @@ Turtle:
 | GPS host: `MY coordinates look wrong` | Re-run `/fleet/bin/setup` on that host with the right x y z. |
 | GPS host: `hosts are (nearly) coplanar` | Raise or lower one host. |
 | Control console: `last denied: #ID ... not in commanders allowlist` | Add that ID to `commanders`. |
-| Map icons show as `?` | Set `ui = { ascii = true }` on the control computer. |
+| Control console: `chat: incorrect player name/uuid` | `owner` is misspelled, or you were offline when the alert fired. Alerts stay on the monitor either way. |
+| Control console: `chat: NOT_SAME_DIMENSION` | The server's Advanced Peripherals config has `chatBoxMultiDimensional = false`. |
+| Side panel: `GPS: 3/4 up (need 4)` | Tap it to see which host is offline. If you removed a host on purpose, press Forget. |
+| You'd rather see plain letters for map icons | Set `ui = { ascii = true }` on the control computer. |
 | `TurtleGPS crashed:` | It restarts by itself. Send `/fleet/data/crash.txt` (`pastebin put /fleet/data/crash.txt` gives you a link). |

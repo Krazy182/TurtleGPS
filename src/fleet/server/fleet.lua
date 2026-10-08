@@ -166,6 +166,12 @@ function Fleet:evaluate(t)
   else
     self:resolve("stuck:" .. id, "moving again")
   end
+  -- no position at all (not even dead reckoning) after the turtle had time to locate
+  if t.fix == "none" and (t.up or 0) > 60 then
+    self:raise("nogps:" .. id, "nogps", 2, t, ("%s has no position: %s"):format(name(t), t.gpsErr or "no GPS fix"))
+  else
+    self:resolve("nogps:" .. id, "located")
+  end
   if t.status == "error" then
     self:raise("error:" .. id, "error", 2, t, ("%s error: %s"):format(name(t), t.msg or "?"))
   else
@@ -295,7 +301,7 @@ function Fleet:action(a)
     local t = self.turtles[a.id]
     if not t then return false, "no such turtle" end
     self.turtles[a.id] = nil
-    for _, k in ipairs({ "lost", "fuel", "full", "stuck", "error" }) do self:resolve(k .. ":" .. a.id, "forgotten") end
+    for _, k in ipairs({ "lost", "fuel", "full", "stuck", "error", "nogps" }) do self:resolve(k .. ":" .. a.id, "forgotten") end
     self.dirty = true
     return true, "forgot " .. name(t)
   elseif a.op == "forgetGps" then
@@ -363,7 +369,8 @@ function Fleet:view(dim, now, forWire)
     info.gps = info.gps + 1
     if g.link == "lost" then info.gpsDown = info.gpsDown + 1 end
     if g.dim == dim then
-      v.gps[#v.gps + 1] = { id = id, x = g.x, y = g.y, z = g.z, link = g.link, verdict = g.verdict }
+      v.gps[#v.gps + 1] = { id = id, x = g.x, y = g.y, z = g.z, link = g.link, verdict = g.verdict,
+        age = now - (g.lastSeen or 0) }
     end
   end
   local garage = self.cfg.garages and self.cfg.garages[dim]

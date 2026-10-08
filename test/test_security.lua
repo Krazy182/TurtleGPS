@@ -40,9 +40,12 @@ return {
         local _, _, ch, reply, msg = os.pullEvent("modem_message")
         if ch == 1 and type(msg) == "table" and msg.sProtocol == "turtlegps" then captured = msg end
       end
+      -- a fresh rednet message id gets past CraftOS' own duplicate filter
       sleep(2)
+      captured.nMessageID = captured.nMessageID + 1
       m.transmit(1, reply or 10, captured)
       sleep(60)
+      captured.nMessageID = captured.nMessageID + 1
       m.transmit(1, 10, captured)
     ]])
     sim:run(80)
@@ -54,7 +57,7 @@ return {
     local sim = H.fleet({ turtles = { { id = 10, dim = "overworld", pos = { 5, 65, 5 }, heading = 1 } } })
     sim:run(10)
     -- a real fleet member (has the secret) whose ID is not allowlisted
-    local rogue = sim:add({ id = 77, dim = "overworld", pos = { 9, 70, 9 },
+    sim:add({ id = 77, dim = "overworld", pos = { 9, 70, 9 },
       peripherals = { back = { "modem", ender = true } },
       files = { ["/startup.lua"] = [[
         package.path = "/fleet/?.lua;" .. package.path

@@ -24,7 +24,16 @@ function H.near(a, b, eps, msg)
   end
 end
 
+--- Fails if any computer crashed: harness-level errors, TurtleGPS crash logs, or an
+--- error left on screen (in real-ROM mode CraftOS' shell prints errors itself).
 function H.noErrors(sim)
+  for id, c in pairs(sim.computers) do
+    local crash = c.fs:readFile("/fleet/data/crash.txt")
+    if crash and not c.allowCrash then sim.errors[#sim.errors + 1] = { id = id, err = "crash.txt: " .. crash } end
+    if c.screen:contains("TurtleGPS crashed") and not c.allowCrash then
+      sim.errors[#sim.errors + 1] = { id = id, err = "screen: " .. c.screen:dumpText() }
+    end
+  end
   if #sim.errors > 0 then
     local lines = {}
     for i, e in ipairs(sim.errors) do
@@ -37,20 +46,19 @@ end
 
 --- Loads a /fleet module inside computer c's environment (for non-yielding calls).
 function H.lib(c, name)
-  if not c.env then
+  -- a separate light-mode environment bound to c, so this works in real-ROM mode too
+  if not c.libEnv then
     c.bootTime = c.bootTime or 0
-    c.env = require("mock.env")(c.sim or H.lastSim, c)
+    c.libEnv = require("mock.env")(c.sim or H.lastSim, c)
   end
-  local env = setmetatable({}, { __index = c.env })
-  env.require, env.package = c.env.__mock.makeRequire(env, "/")
+  local env = setmetatable({}, { __index = c.libEnv })
+  env.require, env.package = c.libEnv.__mock.makeRequire(env, "/")
   env.package.path = "/fleet/?.lua;" .. env.package.path
   return env.require(name)
 end
 
 local cfgSer
 function H.configText(t)
-  local C = {}
-  for k, v in pairs(t) do C[#C + 1] = k end
   cfgSer = cfgSer or dofile("src/fleet/lib/ser.lua")
   return "return " .. cfgSer.serialize(t) .. "\n"
 end
@@ -79,6 +87,7 @@ end
 function H.fleet(opts)
   opts = opts or {}
   local sim = Sim.new({ verbose = opts.verbose })
+  sim:player("Steve", 3.5, 65, -10.5, "overworld") -- the owner, online for chat alerts
   local controlCfg = {
     role = "control", secret = H.SECRET, dim = "overworld", commanders = { 50 },
     owner = "Steve", lostAfter = 45, staleAfter = 12,

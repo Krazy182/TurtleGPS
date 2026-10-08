@@ -33,12 +33,16 @@ function Nav:known() return self.x ~= nil end
 function Nav:pos() return { x = self.x, y = self.y, z = self.z } end
 
 function Nav:save()
-  -- tiny file, written after every move so a reboot resumes in the right place
-  local h = fs.open(self.path, "w")
-  if h then
-    h.write(ser.serialize({ x = self.x, y = self.y, z = self.z, h = self.h, dim = self.dim }))
-    h.close()
-  end
+  -- tiny file, written after every move so a reboot resumes in the right place;
+  -- a full disk must not stop the turtle, so failures only set saveErr
+  local ok, err = pcall(function()
+    local h = fs.open(self.path, "w")
+    if h then
+      h.write(ser.serialize({ x = self.x, y = self.y, z = self.z, h = self.h, dim = self.dim }))
+      h.close()
+    end
+  end)
+  self.saveErr = (not ok) and tostring(err) or nil
 end
 
 function Nav:load()
@@ -59,8 +63,13 @@ function Nav:fix(timeout)
   end
   self.gpsErr = nil
   if p.dim then
-    if self.cfgDim and p.dim ~= self.cfgDim and self.log then
-      self.log:warn("GPS hosts say %s but config says %s; using GPS", p.dim, self.cfgDim)
+    if self.cfgDim and p.dim ~= self.cfgDim then
+      self.warning = ("GPS: %s; config: %s"):format(P.dimLabel(p.dim), P.dimLabel(self.cfgDim))
+      if self.log then
+        self.log:warn("GPS hosts say %s but config says %s; using GPS", p.dim, self.cfgDim)
+      end
+    else
+      self.warning = nil
     end
     self.dim = p.dim
   end
@@ -77,8 +86,6 @@ function Nav:fix(timeout)
   self:save()
   return p
 end
-
-local function sameBlock(a, b) return a.bx == b.bx and a.by == b.by and a.bz == b.bz end
 
 --- Works out which way we face by moving one block and asking GPS again.
 --- Skipped when we are exactly where we were saved (heading is still valid then).

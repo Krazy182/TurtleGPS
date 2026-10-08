@@ -6,6 +6,7 @@ local Screen = require("mock.screen")
 local World = require("mock.world")
 local Periph = require("mock.periph")
 local makeEnv = require("mock.env")
+local makeNatives = require("mock.natives")
 
 local Sim = {}
 Sim.__index = Sim
@@ -53,7 +54,30 @@ function Sim.new(opts)
     ser = nil,
   }, Sim)
   self.ser = self:loadSer()
+  local romDir = opts.rom
+  if romDir == nil then romDir = os.getenv("CC_ROM") end
+  if romDir and romDir ~= "" then self:loadRom(romDir) end
   return self
+end
+
+local romCache = {}
+
+--- Loads bios.lua and rom/ from a CC:Tweaked checkout (data/computercraft/lua).
+function Sim:loadRom(dir)
+  if not romCache[dir] then
+    local rom = { files = {}, dirs = { rom = true } }
+    for _, rel in ipairs(listHost(dir .. "/rom")) do
+      local path = "rom/" .. rel
+      rom.files[path] = readHost(dir .. "/rom/" .. rel)
+      local d = path:match("^(.*)/[^/]*$")
+      while d and d ~= "" and not rom.dirs[d] do
+        rom.dirs[d] = true
+        d = d:match("^(.*)/[^/]*$")
+      end
+    end
+    romCache[dir] = { rom = rom, bios = readHost(dir .. "/bios.lua") }
+  end
+  self.rom = romCache[dir]
 end
 
 function Sim:loadSer()
@@ -78,9 +102,15 @@ end
 
 local function ceilTick(t) return math.ceil(t / TICK - 1e-9) * TICK end
 
+local QUEUE_LIMIT = 256 -- CC:Tweaked ComputerExecutor drops events beyond this
+
 function Sim:queue(c, ev)
   if not c.running then return end
   ev.n = ev.n or #ev
+  if #c.events >= QUEUE_LIMIT then
+    c.dropped = (c.dropped or 0) + 1
+    return
+  end
   c.events[#c.events + 1] = ev
 end
 
@@ -108,6 +138,25 @@ function Sim:turtleResponse(c, duration, ok, err)
   return id
 end
 
+--- Runs a peripheral method the way CC:Tweaked runs @LuaFunction(mainThread = true):
+--- the caller yields until a "task_complete" event on the next tick, so other events
+--- reaching that coroutine in the meantime are lost (as in game).
+function Sim:mainThread(c, fn, ...)
+  local results = table.pack(pcall(fn, ...))
+  c.taskSeq = (c.taskSeq or 0) + 1
+  local id, gen = c.taskSeq, c.gen
+  self:schedule(ceilTick(self.t + TICK), function()
+    if c.gen == gen then self:queue(c, table.pack("task_complete", id, table.unpack(results, 1, results.n))) end
+  end)
+  while true do
+    local ev = table.pack(coroutine.yield("task_complete"))
+    if ev[1] == "task_complete" and ev[2] == id then
+      if not ev[3] then error(ev[4], 0) end
+      return table.unpack(ev, 4, ev.n)
+    end
+  end
+end
+
 -- Computers --------------------------------------------------------------------------
 
 --- spec: id, kind ("computer"|"turtle"|"pocket"), label, dim, pos {x,y,z}, heading,
@@ -118,7 +167,7 @@ function Sim:add(spec)
   local c = {
     id = spec.id, kind = spec.kind or "computer", label = spec.label,
     dim = spec.dim or "overworld", heading = spec.heading or 0, owner = spec.owner,
-    fs = FS.new({ capacity = spec.capacity }),
+    fs = FS.new({ capacity = spec.capacity, rom = self.rom and self.rom.rom }),
     events = {}, cancelled = {}, timerSeq = 0, turtleSeq = 0, gen = 0,
     peripherals = {}, running = false, maxBurst = 0, instructions = 0,
     output = {},
@@ -200,15 +249,23 @@ function Sim:boot(c)
     c.icount = c.icount + 1000
     if c.icount > INSTRUCTION_LIMIT then error("Too long without yielding", 0) end
   end
-  c.env = makeEnv(self, c)
-  local env = c.env
-  c.co = coroutine.create(function()
-    if c.fs:readFile("/startup.lua") then
-      env.shell.run("/startup.lua")
-    end
-  end)
+  if self.rom then
+    -- real CraftOS: bios.lua runs the shell (which runs /startup.lua) and rednet.run
+    c.env = makeNatives(self, c)
+    local bios = assert(load(self.rom.bios, "@bios.lua", "t", c.env))
+    c.co = coroutine.create(bios)
+  else
+    c.env = makeEnv(self, c)
+    local env = c.env
+    c.co = coroutine.create(function()
+      if c.fs:readFile("/startup.lua") then
+        env.shell.run("/startup.lua")
+      end
+    end)
+  end
   debug.sethook(c.co, c.hook, "", 1000)
   self:resume(c, { n = 0 })
+  self:feedInput(c)
 end
 
 function Sim:resume(c, ev)
@@ -351,8 +408,8 @@ function Sim:transmit(from, fromModem, ch, reply, msg)
             delivered = true
             local copy = deepcopy(msg)
             self:queue(c, table.pack("modem_message", side, ch, reply, copy, dist))
-            -- what CraftOS' rednet daemon would turn this into
-            if type(copy) == "table" and copy.nMessageID and (ch == c.id % 65500 or ch == 65535)
+            -- what CraftOS' rednet daemon would turn this into (real ROM mode runs the daemon)
+            if not self.rom and type(copy) == "table" and copy.nMessageID and (ch == c.id % 65500 or ch == 65535)
                 and p.channels[c.id % 65500] and p.channels[65535]
                 and (copy.nRecipient == c.id or copy.nRecipient == 65535) then
               self:queue(c, table.pack("rednet_message", copy.nSender or reply, copy.message, copy.sProtocol))
@@ -393,7 +450,26 @@ function Sim:release(c, x, y, button) self:queue(c, table.pack("mouse_up", butto
 function Sim:drag(c, x, y, button) self:queue(c, table.pack("mouse_drag", button or 1, x, y)) end
 function Sim:key(c, code) self:queue(c, table.pack("key", code, false)) end
 function Sim:char(c, ch) self:queue(c, table.pack("char", ch)) end
-function Sim:typeLines(c, lines) c.inputs = lines end
+--- Scripted keyboard input for read(). Light mode feeds read() directly; real ROM mode
+--- queues char/key events that CraftOS' read() consumes.
+function Sim:typeLines(c, lines)
+  if not self.rom then
+    c.inputs = lines
+    return
+  end
+  c.pendingInput = lines
+end
+
+function Sim:feedInput(c)
+  local lines = c.pendingInput
+  if not lines then return end
+  c.pendingInput = nil
+  for _, line in ipairs(lines) do
+    for i = 1, #line do self:queue(c, table.pack("char", line:sub(i, i))) end
+    self:queue(c, table.pack("key", 257, false))
+    self:queue(c, table.pack("key_up", 257))
+  end
+end
 function Sim:terminate(c) self:queue(c, table.pack("terminate")) end
 
 function Sim:player(name, x, y, z, dim)

@@ -75,7 +75,7 @@ return {
     H.eq(app.sel, 11)
   end },
   { "pocket: drag pans, keys zoom and switch dims", function()
-    local app, s = harness(26, 20)
+    local app = harness(26, 20)
     local v = app:view()
     local cx = v.cx
     app:handle("mouse_click", 1, 10, 10)

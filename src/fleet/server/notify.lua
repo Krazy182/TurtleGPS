@@ -34,7 +34,8 @@ function N:resolved(a, note)
   end
 end
 
---- Run in its own coroutine.
+--- Run in its own coroutine. Chat Box returns nil + reason when on cooldown (retry) or
+--- when the owner is offline / misspelled (drop: retrying would block later alerts).
 function N:pump()
   while true do
     local item = self.queue[1]
@@ -45,14 +46,18 @@ function N:pump()
         end
         return self.chat.sendMessageToPlayer(item.text, self.cfg.owner, "TurtleGPS")
       end)
-      if ok and res then
+      item.tries = (item.tries or 0) + 1
+      local retry = ok and not res and tostring(err):lower():find("cooldown") and item.tries < 10
+      if not retry then
         table.remove(self.queue, 1)
-      elseif not ok then
-        if self.log then self.log:warn("chat box: %s", tostring(res)) end
-        table.remove(self.queue, 1)
+        if not ok or not res then
+          self.lastError = tostring(ok and err or res)
+          if self.log then self.log:warn("chat alert not delivered: %s", self.lastError) end
+        else
+          self.lastError = nil
+        end
       end
-      -- res == nil/false means cooldown: retry after the sleep
-      if not ok or res then sleep(1) else sleep(1.5) end
+      sleep(retry and 1.5 or 1)
     else
       if #self.queue > 0 and not self.chat then self.queue = {} end
       sleep(0.5)

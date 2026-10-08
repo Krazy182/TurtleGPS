@@ -13,6 +13,20 @@ local Fleet = require("server.fleet")
 local Notify = require("server.notify")
 local App = require("ui.app")
 
+--- Text scale: 1 (bigger, easier to touch) when the monitor still gets 60x24 characters,
+--- else 0.5. An explicit monitor.scale in config wins.
+local function chooseScale(mon, want)
+  if type(want) == "number" then
+    mon.setTextScale(want)
+    return want
+  end
+  mon.setTextScale(1)
+  local w, h = mon.getSize()
+  if w >= 60 and h >= 24 then return 1 end
+  mon.setTextScale(0.5)
+  return 0.5
+end
+
 local function findMonitor(cfg)
   local side = cfg.monitor and cfg.monitor.side
   if side and peripheral.getType(side) == "monitor" then return peripheral.wrap(side), side end
@@ -46,15 +60,17 @@ return function(cfg)
 
   local mon, monSide = findMonitor(cfg)
   local ui
+  local statePath = "/fleet/data/ui"
   if mon then
-    mon.setTextScale(cfg.monitor and cfg.monitor.scale or 0.5)
+    local scale = chooseScale(mon, cfg.monitor and cfg.monitor.scale)
     ui = App.new({ term = mon, source = source, kind = "monitor", side = monSide, dim = dim,
-      ascii = cfg.ui and cfg.ui.ascii })
-    log:info("map on monitor '%s' (%dx%d)", monSide, mon.getSize())
+      ascii = cfg.ui and cfg.ui.ascii, statePath = statePath })
+    local mw, mh = mon.getSize()
+    log:info("map on monitor '%s': %dx%d at text scale %s", monSide, mw, mh, tostring(scale))
   else
     log:warn("no advanced monitor found: map shown on this screen")
     ui = App.new({ term = term.current(), source = source, kind = "term", dim = dim,
-      ascii = cfg.ui and cfg.ui.ascii })
+      ascii = cfg.ui and cfg.ui.ascii, statePath = statePath })
   end
 
   local function netLoop()
@@ -106,6 +122,43 @@ return function(cfg)
       local s = net.stats
       term.write(U.trunc(("msgs in %d  out %d  rejected %d  updates sent %d"):format(s.recv, s.sent, s.rejected, upd.served), w))
       local y = 3
+      -- one line per dimension: turtles, lost, GPS hosts
+      local per = {}
+      for _, t in pairs(fleet.turtles) do
+        local d = per[t.dim or "?"] or { t = 0, lost = 0, g = 0, gl = 0 }
+        per[t.dim or "?"] = d
+        d.t = d.t + 1
+        if t.link == "lost" then d.lost = d.lost + 1 end
+      end
+      for _, g in pairs(fleet.gps) do
+        local d = per[g.dim or "?"] or { t = 0, lost = 0, g = 0, gl = 0 }
+        per[g.dim or "?"] = d
+        d.g = d.g + 1
+        if g.link == "lost" then d.gl = d.gl + 1 end
+      end
+      local parts = {}
+      local order = {}
+      for _, d in ipairs(P.DIM_ORDER) do if per[d] then order[#order + 1] = d end end
+      for _, d in ipairs(U.sortedKeys(per)) do
+        local known = false
+        for _, o in ipairs(P.DIM_ORDER) do if o == d then known = true end end
+        if not known then order[#order + 1] = d end
+      end
+      for _, d in ipairs(order) do
+        local x = per[d]
+        parts[#parts + 1] = ("%s %d%s gps %d/%d"):format(P.dimShort(d), x.t, x.lost > 0 and ("(" .. x.lost .. " lost)") or "",
+          x.g - x.gl, x.g)
+      end
+      term.setCursorPos(1, y)
+      term.setTextColor(colors.white)
+      term.write(U.trunc(#parts > 0 and table.concat(parts, "  ") or "no turtles or GPS hosts yet", w))
+      y = y + 1
+      if notify.lastError then
+        term.setCursorPos(1, y)
+        term.setTextColor(colors.orange)
+        term.write(U.trunc("chat: " .. notify.lastError, w))
+        y = y + 1
+      end
       local r = s.last[1]
       if r then
         term.setCursorPos(1, y)

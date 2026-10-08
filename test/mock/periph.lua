@@ -41,27 +41,42 @@ function Periph.playerDetector(sim, c, side)
     table.sort(out)
     return out
   end
+  -- Matches AP dev/1.20.1: errors when playerSpy is off in the server config, returns an
+  -- EMPTY TABLE plus "PLAYER_NOT_FOUND" for unknown players, floors feet coordinates.
   function m.getPlayerPos(name)
-    if sim.detectorDisabled then return nil end
+    if sim.detectorDisabled then
+      error("This function is disabled in the config. Activate it or ask an admin if he can activate it.", 2)
+    end
     local pl = sim.players[name]
-    if not pl or not pl.online then return nil end
+    if not pl or not pl.online then return {}, "PLAYER_NOT_FOUND" end
     return {
-      x = pl.x, y = pl.y, z = pl.z, dimension = "minecraft:" .. pl.dim,
+      x = math.floor(pl.x), y = math.floor(pl.y), z = math.floor(pl.z), dimension = "minecraft:" .. pl.dim,
       eyeHeight = 1.62, yaw = 0, pitch = 0, health = 20, maxHealth = 20,
     }
   end
   m.getPlayer = m.getPlayerPos
   function m.isPlayerInRange() return false end
   function m.getPlayersInRange() return {} end
-  p.methods = m
+  p.methods = Periph.mainThread(sim, c, m)
   return p
+end
+
+--- Every method of these AP peripherals is @LuaFunction(mainThread = true).
+function Periph.mainThread(sim, c, methods)
+  local out = {}
+  for name, fn in pairs(methods) do
+    out[name] = function(...) return sim:mainThread(c, fn, ...) end
+  end
+  return out
 end
 
 function Periph.chatBox(sim, c, side)
   local p = { type = "chatBox", side = side, last = -1 }
   local m = {}
+  -- Matches AP dev/1.20.1: nil + reason on cooldown or unknown/offline player
   local function send(kind, msg, to)
-    if sim.t - p.last < 0.5 then return nil, "You are sending messages too often" end
+    if sim.t - p.last < 0.5 then return nil, "chatMessage is on cooldown" end
+    if to and not (sim.players[to] and sim.players[to].online) then return nil, "incorrect player name/uuid" end
     p.last = sim.t
     sim.chat[#sim.chat + 1] = { t = sim.t, kind = kind, to = to, msg = msg }
     return true
@@ -69,7 +84,7 @@ function Periph.chatBox(sim, c, side)
   function m.sendMessage(msg) return send("all", msg) end
   function m.sendMessageToPlayer(msg, player) return send("player", msg, player) end
   function m.sendToastToPlayer(msg, title, player) return send("toast", title .. ": " .. msg, player) end
-  p.methods = m
+  p.methods = Periph.mainThread(sim, c, m)
   return p
 end
 

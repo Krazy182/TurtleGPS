@@ -29,7 +29,7 @@ C.DEFAULTS = {
     lostAfter = 45,      -- seconds without heartbeat before a turtle is LOST (alert)
     lowFuel = 500,
     owner = nil,         -- player name for Chat Box alerts
-    monitor = { side = nil, scale = 0.5 },
+    monitor = { side = nil, scale = nil }, -- scale nil = pick 1 or 0.5 from the monitor size
     garages = {},        -- [dim] = { x = , y = , z = }  shown on the map
     ui = { ascii = false },
   },

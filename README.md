@@ -72,11 +72,19 @@ Milestone 1 also ships the parts every later milestone relies on:
 
 ```
 sudo apt install lua5.2          # same Lua version as CC:Tweaked's Cobalt VM
-lua5.2 test/run.lua              # whole suite (mock CC:Tweaked world, ~20 s)
+lua5.2 test/run.lua              # whole suite in the mock CC:Tweaked world (~1 min)
 lua5.2 test/run.lua m1           # only tests whose name contains "m1"
+sh tools/fetch_rom.sh && CC_ROM=test/rom/lua lua5.2 test/run.lua   # same suite on the real CraftOS ROM
 lua5.2 tools/build.lua           # rebuild dist/install.lua after changing src/
 python3 tools/render_screen.py test/out/m1_monitor.json   # look at a mock monitor
+luacheck src tools test          # static checks (.luacheckrc)
 ```
+
+53 tests cover: libraries, GPS, turtle navigation, milestone 1 end to end, OTA updates,
+security, UI layouts, installer and setup, and failure modes (full disk, bad config, spam,
+30-turtle load). They pass both with the built-in CraftOS ports and on the real CraftOS ROM.
+[docs/VERIFIED.md](docs/VERIFIED.md) lists the CC:Tweaked and Advanced Peripherals behaviour
+checked against their source.
 
 Layout:
 
@@ -91,6 +99,6 @@ src/fleet/            installed to /fleet on every computer
   bin/                setup.lua, gpscheck.lua
 dist/install.lua      single-file installer (generated)
 test/                 mock harness (test/mock) and tests
-tools/                build.lua, render_screen.py
-docs/                 SETUP.md, TESTING.md, PROTOCOL.md
+tools/                build.lua, render_screen.py, fetch_rom.sh
+docs/                 SETUP.md, TESTING.md, PROTOCOL.md, VERIFIED.md
 ```

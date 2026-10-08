@@ -62,7 +62,7 @@ return function(cfg)
     local bad, points, close = 0, { me }, 0
     for _, pr in ipairs(peers) do
       if not pr.ok then bad = bad + 1 end
-      if pr.d < 6 then close = close + 1 end
+      if pr.d < 2 then close = close + 1 end
       points[#points + 1] = pr.p
     end
     if #peers == 0 then
@@ -76,7 +76,7 @@ return function(cfg)
     elseif locate.spread(points) < 1e-3 then
       stats.verdict = "hosts are (nearly) coplanar: raise or lower one"
     elseif close > 0 then
-      stats.verdict = "OK, but keep hosts 6+ blocks apart for stock gps"
+      stats.verdict = "OK, but two hosts are almost touching: spread them out"
     else
       stats.verdict = "OK: " .. #points .. " hosts, good 3D spread"
     end
@@ -104,7 +104,7 @@ return function(cfg)
 
   local function netLoop()
     while true do
-      local ev, a, b, c = os.pullEvent("rednet_message")
+      local _, a, b, c = os.pullEvent("rednet_message")
       local from, body = net:unwrap(a, b, c)
       if from == cfg.serverId then
         if body.type == P.HB_ACK then
